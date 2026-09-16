@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="sw"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TBMS - Toangoma Boda Management</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root{--bg:#0e1b1a;--surface:#152624;--surface2:#1d332f;--line:#2a423c;--text:#eaf2ef;--muted:#8fa89f;--accent:#d9a441;--ok:#5fb088;--bad:#e2665b}
+body.light{--bg:#f4f7f6;--surface:#ffffff;--surface2:#eef2f1;--line:#dbe4e1;--text:#16221f;--muted:#5c6f6a;--accent:#b8790f;--ok:#2e8f5f;--bad:#c0392b}
+body{transition:background .2s ease,color .2s ease}
+.theme-toggle{background:var(--surface2);border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:12px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px Inter,Arial,sans-serif}button,input,select{font:inherit}button{cursor:pointer}.hidden{display:none!important}
+.auth{min-height:100vh;display:grid;place-items:center;padding:20px}.box{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;width:min(440px,100%)}h1,h2,h3{margin:0 0 10px}.muted{color:var(--muted)}label{display:block;color:var(--muted);margin:12px 0 5px}input,select{width:100%;padding:11px;border-radius:7px;border:1px solid var(--line);background:var(--surface2);color:var(--text)}button{padding:10px 13px;border-radius:7px;border:1px solid var(--line);background:var(--surface2);color:var(--text)}.primary{background:var(--accent);color:#171108;border:0;font-weight:700}.danger{color:#fff;background:var(--bad);border-color:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}.value{font-size:24px;font-weight:800}.layout{min-height:100vh;display:flex;flex-direction:column}.top{height:58px;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 18px}.body{display:flex;flex:1}.side{width:200px;border-right:1px solid var(--line);padding:10px}.side button{display:block;width:100%;text-align:left;margin:3px 0;background:transparent;border-color:transparent}.side button.active{background:var(--surface2);border-color:var(--line)}main{flex:1;padding:22px;overflow:auto}.form{max-width:480px;margin:15px 0}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:8px;border-bottom:1px solid var(--line);text-align:left}.msg{padding:9px;margin:8px 0;border-radius:7px}.ok{background:#163428;color:#a8e1c3}.err{background:#3a1e1b;color:#ffaaa1}.link{background:none;border:0;color:var(--accent);padding:0}.small{font-size:12px}.badge{padding:3px 9px;border-radius:20px;background:var(--surface2);font-size:12px}
+.qpos{font-size:46px;font-weight:800;color:var(--accent);text-align:center}
+@media(max-width:760px){.side{position:fixed;z-index:3;left:-220px;top:58px;bottom:0;background:var(--bg);transition:.2s}.side.open{left:0}main{padding:14px}.menu{display:block!important}}
+.menu{display:none;background:none;border:0;font-size:22px}
+</style></head><body>
+
+<div id="auth" class="auth"><div class="box">
+<div class="row" style="justify-content:flex-end"><button class="theme-toggle" onclick="toggleTheme()">🌓 Mode</button></div>
+<h1>🏍️ TBMS</h1><p class="muted">Toangoma Boda Management System</p>
+<div id="authmsg"></div>
+<section id="login">
+<h2>Ingia</h2><label>Namba ya Simu</label><input id="le" placeholder="07XXXXXXXX"><label>Password</label><input id="lp" type="password">
+<button class="primary" style="width:100%;margin-top:14px" onclick="login()">Ingia</button>
+<div class="row" style="margin-top:14px"><button class="link" onclick="showAuth('register')">Fungua akaunti (Driver)</button></div>
+</section>
+<section id="register" class="hidden">
+<h2>Fungua Akaunti ya Driver</h2>
+<label>Jina Kamili</label><input id="rn">
+<label>Namba ya Simu</label><input id="rp1" placeholder="07XXXXXXXX">
+<label>Email (hiari)</label><input id="re">
+<label>National ID</label><input id="rnid">
+<label>Namba ya Leseni</label><input id="rlic">
+<label>Namba ya Usajili wa Pikipiki</label><input id="rmoto">
+<label>Emergency Contact</label><input id="remg">
+<label>Password</label><input id="rpw" type="password">
+<button class="primary" style="width:100%;margin-top:14px" onclick="register()">Fungua Akaunti</button>
+<button class="link" onclick="showAuth('login')" style="margin-top:14px">Rudi kuingia</button>
+</section>
+</div></div>
+
+<div id="app" class="layout hidden">
+<header class="top"><div style="display:flex;align-items:center;gap:8px"><button class="menu" onclick="document.querySelector('.side').classList.toggle('open')">☰</button><b>🏍️ TBMS</b></div><div class="row"><button class="theme-toggle" onclick="toggleTheme()">🌓</button><span id="who" class="muted"></span> <button onclick="logout()">Toka</button></div></header>
+<div class="body"><nav class="side" id="side"></nav><main id="main"></main></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id), money=n=>'TSh '+Number(n||0).toLocaleString();
+function toggleTheme(){document.body.classList.toggle('light');localStorage.setItem('tbms-theme',document.body.classList.contains('light')?'light':'dark')}
+if(localStorage.getItem('tbms-theme')==='light')document.body.classList.add('light');
+async function api(url,opt={}){let r=await fetch(url,{credentials:'include',headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Request failed');return d}
+function msg(t,ok=false){$('authmsg').innerHTML=`<div class="msg ${ok?'ok':'err'}">${t}</div>`}
+function showAuth(v){['login','register'].forEach(x=>$(x).classList.toggle('hidden',x!==v));$('authmsg').innerHTML=''}
+
+async function register(){
+  try{
+    await api('/api/auth/register',{method:'POST',body:JSON.stringify({
+      fullName:$('rn').value, phone:$('rp1').value, email:$('re').value, password:$('rpw').value,
+      nationalId:$('rnid').value, licenseNumber:$('rlic').value, motorcycleReg:$('rmoto').value, emergencyContact:$('remg').value
+    })});
+    await boot();
+  }catch(e){msg(e.message)}
+}
+async function login(){try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({phone:$('le').value,password:$('lp').value})});await boot()}catch(e){msg(e.message)}}
+async function logout(){await api('/api/auth/logout',{method:'POST'});location.reload()}
+
+let me=null, myDriver=null, module='home', socket=null;
+
+async function boot(){
+  try{
+    let d=await api('/api/me'); me=d.user; myDriver=d.driver;
+    $('auth').classList.add('hidden'); $('app').classList.remove('hidden');
+    $('who').textContent=`${me.full_name} (${me.role})`;
+    renderNav(); openModule('home');
+    connectSocket();
+  }catch{}
+}
+function connectSocket(){
+  socket=io();
+  socket.emit('join-station', 1);
+  socket.on('queue.updated', ()=>{ if(module==='home'||module==='leader') openModule(module) });
+  socket.on('trip.started', ()=>{ if(module==='home'||module==='leader') openModule(module) });
+  socket.on('trip.arrival_requested', ()=>{ if(module==='leader') openModule(module) });
+  socket.on('trip.completed', ()=>{ if(module==='home'||module==='leader') openModule(module) });
+}
+function renderNav(){
+  let items=[['home','🏠 Home']];
+  if(me.role==='leader'||me.role==='super_admin') items.push(['leader','📋 Leader Dashboard']);
+  if(me.role==='super_admin') items.push(['admin','⚙️ Super Admin']);
+  $('side').innerHTML=items.map(x=>`<button class="${module===x[0]?'active':''}" onclick="openModule('${x[0]}')">${x[1]}</button>`).join('');
+}
+function openModule(m){module=m;renderNav();document.querySelector('.side').classList.remove('open');({home:homeModule,leader:leaderModule,admin:adminModule})[m]()}
+
+// ---------- DRIVER HOME ----------
+async function homeModule(){
+  if(me.role!=='driver'){ $('main').innerHTML='<p class="muted">Hii ni sehemu ya Driver.</p>'; return }
+  if(myDriver.status==='pending'){ $('main').innerHTML='<div class="card"><h3>Akaunti Inasubiri Uthibitisho</h3><p class="muted">Leader atathibitisha usajili wako hivi karibuni.</p></div>'; return }
+  if(myDriver.status==='suspended'){ $('main').innerHTML=`<div class="card"><h3>🔴 Umesimamishwa</h3><p class="muted">Huwezi kutumia foleni kwa sasa.</p></div>`; return }
+  if(myDriver.status==='banned'){ $('main').innerHTML=`<div class="card"><h3>🔴 Umezuiwa</h3></div>`; return }
+
+  let trips=await api('/api/trips/mine');
+  if(trips.active){
+    let t=trips.active;
+    $('main').innerHTML=`<div class="card"><h3>🔵 UNA SAFARI</h3>
+      <p>Destination: <b>${t.destination||'-'}</b></p>
+      <p class="muted small">Trip: ${t.trip_code} • Ilianza: ${new Date(t.started_at).toLocaleTimeString()}</p>
+      ${t.status==='on_trip'?`<button class="primary" onclick="driverArrived(${t.id})">✅ NIMEFIKA</button>`:`<p class="muted">Inasubiri Leader athibitishe kuwasili kwako...</p>`}
+    </div>`;
+    return;
+  }
+
+  let q=await api('/api/queue');
+  let mine=q.queue.find(x=>x.driver_id===myDriver.id);
+  $('main').innerHTML=`<h2>Foleni ya Toangoma</h2>
+  ${mine?`<div class="card"><div class="qpos">#${mine.position}</div><p class="muted" style="text-align:center">Nafasi yako kwenye foleni (${q.queue.length} jumla)</p><button class="danger" style="width:100%;margin-top:10px" onclick="leaveQueue()">Toka Foleni</button></div>`
+    : `<div class="card"><p class="muted">Hupo kwenye foleni kwa sasa.</p><button class="primary" style="width:100%;margin-top:10px" onclick="joinQueue()">Jiunge na Foleni</button></div>`}
+  <h3 style="margin-top:20px">Foleni ya Sasa</h3>
+  <table class="table"><tr><th>#</th><th>Driver</th></tr>${q.queue.map(x=>`<tr><td>${x.position}</td><td>${x.full_name}${x.driver_id===myDriver.id?' (Wewe)':''}</td></tr>`).join('')||'<tr><td colspan=2>Hakuna kwenye foleni.</td></tr>'}</table>`;
+}
+async function joinQueue(){try{await api('/api/queue/join',{method:'POST'});openModule('home')}catch(e){alert(e.message)}}
+async function leaveQueue(){await api('/api/queue/leave',{method:'POST'});openModule('home')}
+async function driverArrived(tripId){await api(`/api/trips/${tripId}/driver-arrived`,{method:'POST'});openModule('home')}
+
+// ---------- LEADER DASHBOARD ----------
+async function leaderModule(){
+  let d=await api('/api/leader/dashboard');
+  $('main').innerHTML=`<h2>📋 Leader Dashboard</h2>
+  <div class="grid">
+    <div class="card"><div class="muted">Total</div><div class="value">${d.counts.total}</div></div>
+    <div class="card"><div class="muted">Ready</div><div class="value" style="color:var(--ok)">${d.counts.ready}</div></div>
+    <div class="card"><div class="muted">On Trip</div><div class="value">${d.counts.on_trip}</div></div>
+    <div class="card"><div class="muted">Arrival Pending</div><div class="value">${d.counts.arrival_pending}</div></div>
+    <div class="card"><div class="muted">Suspended</div><div class="value" style="color:var(--bad)">${d.counts.suspended}</div></div>
+    <div class="card"><div class="muted">Banned</div><div class="value" style="color:var(--bad)">${d.counts.banned}</div></div>
+  </div>
+
+  ${d.pendingApproval.length?`<h3 style="margin-top:20px">🆕 Wanasubiri Uthibitisho</h3>${d.pendingApproval.map(p=>`
+    <div class="card" style="margin:8px 0"><b>${p.full_name}</b> - ${p.phone}<br><span class="small muted">ID: ${p.national_id||'-'} • Leseni: ${p.license_number||'-'} • Pikipiki: ${p.motorcycle_reg||'-'}</span>
+    <div class="row" style="margin-top:8px"><button class="primary" onclick="approveDriver(${p.id})">✅ Thibitisha</button></div></div>`).join('')}`:''}
+
+  ${d.arrivalPendingTrips.length?`<h3 style="margin-top:20px">🟡 Wanasubiri Uthibitisho wa Kuwasili</h3>${d.arrivalPendingTrips.map(t=>`
+    <div class="card" style="margin:8px 0"><b>${t.full_name}</b> (${t.driver_code||'-'}) → ${t.destination||'-'}<br>
+    <button class="primary" onclick="confirmArrival(${t.id})">✅ Thibitisha Kuwasili</button></div>`).join('')}`:''}
+
+  <h3 style="margin-top:20px">🚦 Foleni ya Sasa (#1 ndiye anayefuata)</h3>
+  <table class="table"><tr><th>#</th><th>Driver</th><th>Vitendo</th></tr>
+  ${d.queue.map(x=>`<tr><td>${x.position}</td><td>${x.full_name} (${x.driver_code||'-'})</td><td>
+    ${x.position===1?`<button class="primary" onclick="startTripPrompt(${x.driver_id})">Anzisha Trip</button>`:''}
+    <button class="danger" onclick="suspendPrompt(${x.driver_id})">Simamisha</button>
+  </td></tr>`).join('')||'<tr><td colspan=3>Hakuna kwenye foleni.</td></tr>'}</table>`;
+}
+async function approveDriver(driverId){await api(`/api/leader/approve-driver/${driverId}`,{method:'POST'});leaderModule()}
+async function confirmArrival(tripId){await api(`/api/trips/${tripId}/leader-confirm`,{method:'POST'});leaderModule()}
+async function startTripPrompt(driverId){
+  let dest=prompt('Destination ya safari?');
+  if(dest===null)return;
+  try{await api('/api/trips/start',{method:'POST',body:JSON.stringify({driverId,destination:dest})});leaderModule()}catch(e){alert(e.message)}
+}
+async function suspendPrompt(driverId){
+  let days=prompt('Simamisha kwa siku ngapi? (weka "ban" kwa kuzuia kudumu)','1');
+  if(days===null)return;
+  const isBan = days.trim().toLowerCase()==='ban';
+  let reason=prompt('Sababu?')||'';
+  await api('/api/leader/suspend',{method:'POST',body:JSON.stringify({driverId,reason,days:isBan?null:Number(days),isBan})});
+  leaderModule();
+}
+
+// ---------- SUPER ADMIN ----------
+async function adminModule(){
+  let d=await api('/api/admin/dashboard');
+  let drivers=await api('/api/admin/drivers');
+  $('main').innerHTML=`<h2>⚙️ Super Admin Dashboard</h2>
+  <div class="grid">
+    <div class="card"><div class="muted">Stations</div><div class="value">${d.stations}</div></div>
+    <div class="card"><div class="muted">Total Drivers</div><div class="value">${d.totalDrivers}</div></div>
+    <div class="card"><div class="muted">Active Drivers</div><div class="value">${d.activeDrivers}</div></div>
+    <div class="card"><div class="muted">Today's Trips</div><div class="value">${d.todayTrips}</div></div>
+    <div class="card"><div class="muted">Suspensions</div><div class="value" style="color:var(--bad)">${d.suspensions}</div></div>
+  </div>
+  <h3 style="margin-top:20px">Madereva Wote</h3>
+  <table class="table"><tr><th>Jina</th><th>Simu</th><th>Status</th><th>Code</th></tr>
+  ${drivers.drivers.map(x=>`<tr><td>${x.full_name}</td><td>${x.phone}</td><td><span class="badge">${x.status}</span></td><td>${x.driver_code||'-'}</td></tr>`).join('')}
+  </table>`;
+}
+
+boot();
+</script></body></html>
