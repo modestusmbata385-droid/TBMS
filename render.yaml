@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: tbms
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SUPERADMIN_PHONE
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tbms-db
+          property: connectionString
+
+databases:
+  - name: tbms-db
+    plan: free
